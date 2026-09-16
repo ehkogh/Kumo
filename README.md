@@ -1,17 +1,10 @@
 # Kumo
 
-Kumo is a compatibility plugin for a Photon-based VR social game. It keeps game-specific
-room behavior outside the Photon server itself and is structured so support for different
-client generations can evolve without turning the plugin into one giant callback file.
-
-The current compatibility target is the 2022 client generation supported by the original
-plugin. The implementation ports that behavior while splitting
-backend access, actor state, property validation, moderation, event routing, instantiation,
-rate-limit announcements, and interaction permissions into separate components.
+Kumo is a Photon plugin for a VR social game.
 
 ## Build
 
-Kumo currently references the local OpenPhoton `PhotonHivePlugin` contract for development:
+I currently use my own OpenPhoton implementation for Kumo, however a standard Photon plugin dll should work.
 
 ```sh
 dotnet build Kumo.slnx
@@ -21,8 +14,6 @@ The plugin assembly is `Kumo.Plugin.dll` and the factory type is
 `Kumo.Plugin.KumoPluginFactory`.
 
 ## Configuration
-
-Kumo accepts the legacy backend settings while the backend abstraction is being generalized:
 
 ```xml
 <Plugin Name="Kumo"
