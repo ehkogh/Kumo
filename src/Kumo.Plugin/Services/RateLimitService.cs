@@ -44,9 +44,9 @@ public sealed class RateLimitService
         {
             _host.BroadcastEvent(
                 new List<int> { actor },
-                actor,
+                0,
                 EventCodes.RateLimitTick,
-                PhotonPayload.Wrap(actor, null),
+                PhotonPayload.Wrap(0, null),
                 0);
         }
     }

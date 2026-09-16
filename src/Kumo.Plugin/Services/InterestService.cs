@@ -19,9 +19,7 @@ public sealed class InterestService
         if (info.Request.Data is byte[] data)
             LogInterests(info.ActorNr, data);
 
-        var playerViews = _host.GameActors
-            .Select(actor => actor.ActorNr * 100000 + 1)
-            .ToArray();
+        var playerViews = _host.GameActors.Select(actor => actor.ActorNr).ToArray();
 
         var payload = new Dictionary<byte, object>
         {

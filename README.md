@@ -4,7 +4,8 @@ Kumo is a compatibility plugin for a Photon-based VR social game. It keeps game-
 room behavior outside the Photon server itself and is structured so support for different
 client generations can evolve without turning the plugin into one giant callback file.
 
-The current implementation ports the reusable behavior from an older plugin while splitting
+The current compatibility target is the 2022 client generation supported by the original
+plugin. The implementation ports that behavior while splitting
 backend access, actor state, property validation, moderation, event routing, instantiation,
 rate-limit announcements, and interaction permissions into separate components.
 
@@ -28,12 +29,8 @@ Kumo accepts the legacy backend settings while the backend abstraction is being 
         AssemblyName="Kumo.Plugin.dll"
         Type="Kumo.Plugin.KumoPluginFactory"
         ApiUrl="http://127.0.0.1:8080"
-        PhotonApiSecret="change-me"
-        AllowLegacyClients="true" />
+        PhotonApiSecret="change-me" />
 ```
-
-`AllowLegacyClients` permits authenticated clients that predate instance join tokens to be
-looked up by their verified user id instead.
 
 ## License
 

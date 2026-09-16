@@ -6,10 +6,6 @@ public sealed class KumoOptions
 
     public string ApiSecret { get; private set; } = string.Empty;
 
-    public bool AllowLegacyClients { get; private set; }
-
-    public bool StrictLegacyViewLayout { get; private set; }
-
     public static bool TryCreate(
         Dictionary<string, string> config,
         out KumoOptions options,
@@ -31,13 +27,7 @@ public sealed class KumoOptions
 
         options.ApiUrl = apiUrl.TrimEnd('/');
         options.ApiSecret = secret;
-        options.AllowLegacyClients = GetBoolean(config, "AllowLegacyClients");
-        options.StrictLegacyViewLayout = GetBoolean(config, "StrictLegacyViewLayout");
         error = string.Empty;
         return true;
     }
-
-    private static bool GetBoolean(Dictionary<string, string> config, string key) =>
-        config.TryGetValue(key, out var value) &&
-        value.Equals("true", StringComparison.OrdinalIgnoreCase);
 }

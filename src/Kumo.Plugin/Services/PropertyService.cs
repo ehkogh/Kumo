@@ -9,14 +9,11 @@ public sealed class PropertyService
 {
     private readonly RoomState _state;
     private readonly IPluginHost _host;
-    private readonly IPluginLogger _log;
-    private readonly HashSet<string> _reportedClaims = new();
 
-    public PropertyService(RoomState state, IPluginHost host, IPluginLogger log)
+    public PropertyService(RoomState state, IPluginHost host)
     {
         _state = state;
         _host = host;
-        _log = log;
     }
 
     public bool TryPrepare(int actorNumber, Hashtable current, out Hashtable prepared, out string error)
@@ -48,29 +45,37 @@ public sealed class PropertyService
         if (current["user"] is Dictionary<string, object> presentedUser &&
             presentedUser.TryGetValue("displayName", out var displayNameValue) &&
             displayNameValue is string presentedName &&
-            !string.IsNullOrEmpty(presentedName) &&
             !string.Equals(presentedName, identity.User.DisplayName, StringComparison.Ordinal))
         {
             if (isPrivileged)
                 userProperties["displayName"] = presentedName;
             else
-                LogClaimOnce(actorNumber, "displayName", $"ignoring displayName claim '{presentedName}'");
+            {
+                error = "Can't set user->displayName";
+                return false;
+            }
         }
 
-        if (current["modTag"] is string modTag && !string.IsNullOrEmpty(modTag))
+        if (current.ContainsKey("modTag") && current["modTag"] is not null)
         {
-            if (isPrivileged)
-                result["modTag"] = modTag;
-            else
-                LogClaimOnce(actorNumber, "modTag", $"ignoring modTag claim '{modTag}'");
+            if (!isPrivileged)
+            {
+                error = "Can't set modTag";
+                return false;
+            }
+
+            result["modTag"] = current["modTag"];
         }
 
         if (current["isInvisible"] is bool invisible && invisible)
         {
-            if (isPrivileged)
-                result["isInvisible"] = true;
-            else
-                LogClaimOnce(actorNumber, "isInvisible", "ignoring isInvisible claim");
+            if (!isPrivileged)
+            {
+                error = "Can't set isInvisible";
+                return false;
+            }
+
+            result["isInvisible"] = true;
         }
 
         CopyIfPresent(current, result, "avatarEyeHeight");
@@ -88,17 +93,6 @@ public sealed class PropertyService
     public void Broadcast(int actorNumber, Hashtable properties)
     {
         _host.BroadcastEvent(0, actorNumber, 0, 42, Protocol.PhotonPayload.Wrap(actorNumber, properties), 0);
-    }
-
-    private void LogClaimOnce(int actorNumber, string claim, string message)
-    {
-        lock (_reportedClaims)
-        {
-            if (!_reportedClaims.Add($"{actorNumber}:{claim}"))
-                return;
-        }
-
-        _log.Warn($"Kumo: actor {actorNumber} {message}.");
     }
 
     private static bool IsPrivileged(UserRecord user) =>

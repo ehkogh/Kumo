@@ -11,7 +11,6 @@ namespace Kumo.Plugin;
 public sealed class KumoPlugin : PluginBase
 {
     private RoomState? _state;
-    private KumoOptions? _options;
     private IKumoApiClient? _api;
     private IPluginLogger? _log;
     private AuthorizationService? _authorization;
@@ -57,19 +56,18 @@ public sealed class KumoPlugin : PluginBase
             log.Warn($"Kumo: runtime configuration unavailable; using defaults: {ex.Message}");
         }
 
-        var properties = new PropertyService(state, host, log);
+        var properties = new PropertyService(state, host);
         var moderation = new ModerationService(state, host, log);
         var rateLimits = new RateLimitService(state, host);
         var interactions = new InteractionPermissionService(state, host);
         var profiles = new ProfileRefreshService(state, api, host, properties);
         var interest = new InterestService(host, log);
-        var instantiation = new InstantiationService(state, options, host, log);
+        var instantiation = new InstantiationService(state, host, log);
 
         _state = state;
-        _options = options;
         _api = api;
         _log = log;
-        _authorization = new AuthorizationService(api, options, log);
+        _authorization = new AuthorizationService(api, log);
         _properties = properties;
         _moderation = moderation;
         _rateLimits = rateLimits;
