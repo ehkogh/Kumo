@@ -22,7 +22,8 @@ public sealed class KumoPlugin : PluginBase
 
     public override string Name => "Kumo";
 
-    public override string Version => "0.1.0";
+    public override string Version =>
+        typeof(KumoPlugin).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
     public override bool SetupInstance(IPluginHost host, Dictionary<string, string> config, out string errorMsg)
     {

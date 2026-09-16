@@ -7,10 +7,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Kumo.Plugin</AssemblyName>
     <RootNamespace>Kumo.Plugin</RootNamespace>
+
+    <!--
+      Local development uses the OpenPhoton checkout that lives beside Kumo's
+      repository root. CI overrides this property after checking out the latest
+      tagged OpenPhoton release into the Actions workspace.
+    -->
+    <OpenPhotonRoot Condition="'$(OpenPhotonRoot)' == ''">..\..\..</OpenPhotonRoot>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\OpenPhoton.HivePlugin\OpenPhoton.HivePlugin.csproj" />
+    <ProjectReference Include="$(OpenPhotonRoot)/src/OpenPhoton.HivePlugin/OpenPhoton.HivePlugin.csproj" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
   </ItemGroup>
 

@@ -13,6 +13,19 @@ dotnet build Kumo.slnx
 The plugin assembly is `Kumo.Plugin.dll` and the factory type is
 `Kumo.Plugin.KumoPluginFactory`.
 
+## Releases
+
+Release builds are tag-driven. Pushing a tag such as `v0.1.0` builds Kumo against
+the latest published OpenPhoton release, stamps the plugin assembly with `0.1.0`,
+packages the plugin and its private dependencies, and creates the matching GitHub
+release automatically.
+
+The release archive intentionally does not include `PhotonHivePlugin.dll`. That
+assembly is the host/plugin contract and must be supplied by the Photon server.
+
+The release workflow can also be run manually with a version number to rehearse a
+build without publishing a GitHub release.
+
 ## Configuration
 
 ```xml

@@ -1,0 +1,116 @@
+name: release
+
+# A vX.Y.Z tag is the release version. The workflow also resolves the latest
+# published OpenPhoton release and builds Kumo against that exact contract tag.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (no leading v). Produces an artifact but no release."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Kumo
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Resolve versions
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            kumo_version="${{ inputs.version }}"
+          else
+            kumo_version="${GITHUB_REF_NAME#v}"
+          fi
+
+          openphoton_tag="$(gh release view --repo ehkogh/OpenPhoton --json tagName --jq .tagName)"
+          if [ -z "$openphoton_tag" ]; then
+            echo "Could not resolve the latest OpenPhoton release." >&2
+            exit 1
+          fi
+
+          echo "kumo_version=$kumo_version" >> "$GITHUB_OUTPUT"
+          echo "openphoton_tag=$openphoton_tag" >> "$GITHUB_OUTPUT"
+          echo "archive_name=kumo-$kumo_version" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout latest OpenPhoton release
+        uses: actions/checkout@v4
+        with:
+          repository: ehkogh/OpenPhoton
+          ref: ${{ steps.versions.outputs.openphoton_tag }}
+          path: dependencies/OpenPhoton
+
+      - name: Build Kumo
+        env:
+          OPENPHOTON_ROOT: ${{ github.workspace }}/dependencies/OpenPhoton
+          KUMO_VERSION: ${{ steps.versions.outputs.kumo_version }}
+        run: |
+          dotnet publish src/Kumo.Plugin/Kumo.Plugin.csproj \
+            -c Release \
+            -p:OpenPhotonRoot="$OPENPHOTON_ROOT" \
+            -p:Version="$KUMO_VERSION" \
+            -p:DebugType=none \
+            -o dist/publish \
+            --nologo
+
+      - name: Stage release archive
+        env:
+          NAME: ${{ steps.versions.outputs.archive_name }}
+          OPENPHOTON_TAG: ${{ steps.versions.outputs.openphoton_tag }}
+        run: |
+          mkdir -p "dist/$NAME"
+
+          cp dist/publish/Kumo.Plugin.dll "dist/$NAME/"
+          cp dist/publish/Newtonsoft.Json.dll "dist/$NAME/"
+
+          if [ -f dist/publish/Kumo.Plugin.deps.json ]; then
+            cp dist/publish/Kumo.Plugin.deps.json "dist/$NAME/"
+          fi
+
+          cp README.md LICENSE "dist/$NAME/"
+          printf '%s\n' "$OPENPHOTON_TAG" > "dist/$NAME/OpenPhoton.version"
+
+          # PhotonHivePlugin is a shared contract supplied by the host. Shipping a
+          # second copy beside Kumo can create a second IPluginFactory type identity.
+          if find "dist/$NAME" -maxdepth 1 -name 'PhotonHivePlugin*' | grep -q .; then
+            echo "Release archive unexpectedly contains PhotonHivePlugin." >&2
+            exit 1
+          fi
+
+          cd dist
+          zip -qr "$NAME.zip" "$NAME"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.versions.outputs.archive_name }}
+          path: dist/${{ steps.versions.outputs.archive_name }}.zip
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARCHIVE: dist/${{ steps.versions.outputs.archive_name }}.zip
+          OPENPHOTON_TAG: ${{ steps.versions.outputs.openphoton_tag }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Kumo ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --notes "Built against OpenPhoton $OPENPHOTON_TAG." \
+            "$ARCHIVE"
