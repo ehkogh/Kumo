@@ -22,14 +22,41 @@ public sealed class AuthorizationService
     {
         try
         {
+            JoinValidationResponse result;
             if (!string.IsNullOrWhiteSpace(token))
-                return _api.ValidateJoin(roomId, token!, onCreate) ?? Invalid();
+                result = _api.ValidateJoin(roomId, token!, onCreate) ?? Invalid();
+            else
+            {
+                if (!_options.AllowLegacyClients)
+                    return Invalid();
 
-            if (!_options.AllowLegacyClients)
+                _log.Info($"Kumo: {userId} presented no join token; using verified user identity.");
+                result = _api.GetUser(userId) ?? Invalid();
+            }
+
+            if (!result.Valid)
+                return result;
+
+            if (!string.Equals(result.User.Id, userId, StringComparison.Ordinal))
+            {
+                _log.Warn(
+                    $"Kumo: backend identity '{result.User.Id}' did not match authenticated user '{userId}'.");
+
+                if (!string.IsNullOrWhiteSpace(result.User.Id))
+                {
+                    try
+                    {
+                        _api.PlayerLeft(roomId, result.User.Id);
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 return Invalid();
+            }
 
-            _log.Info($"Kumo: {userId} presented no join token; using verified user identity.");
-            return _api.GetUser(userId) ?? Invalid();
+            return result;
         }
         catch (Exception ex)
         {

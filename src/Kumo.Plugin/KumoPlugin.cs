@@ -126,7 +126,7 @@ public sealed class KumoPlugin : PluginBase
         if (!_properties!.TryPrepare(1, info.Request.ActorProperties, out var prepared, out var error))
         {
             _state.Actors.TryRemove(1, out _);
-            info.Fail(error);
+            RejectAuthorizedJoin(info, identity.User.Id, error);
             return;
         }
 
@@ -160,13 +160,13 @@ public sealed class KumoPlugin : PluginBase
 
         if (_state.Capacity > 0 && PluginHost.GameActors.Count >= _state.Capacity * 2 && !isCapacityExempt)
         {
-            info.Fail("Game is full.");
+            RejectAuthorizedJoin(info, identity.User.Id, "Game is full.");
             return;
         }
 
         if (!isStaff && _state.Actors.Values.Any(actor => actor.UserId == identity.User.Id))
         {
-            info.Fail("User is already in this room.");
+            RejectAuthorizedJoin(info, identity.User.Id, "User is already in this room.");
             return;
         }
 
@@ -175,7 +175,7 @@ public sealed class KumoPlugin : PluginBase
             var ipCount = _state.Actors.Values.Count(actor => actor.IpAddress == identity.Ip);
             if (ipCount >= _state.MaxAccountsPerIp)
             {
-                info.Fail("Maximum account limit per instance reached.");
+                RejectAuthorizedJoin(info, identity.User.Id, "Maximum account limit per instance reached.");
                 return;
             }
         }
@@ -186,7 +186,7 @@ public sealed class KumoPlugin : PluginBase
         if (!_properties!.TryPrepare(info.ActorNr, info.Request.ActorProperties, out var prepared, out var error))
         {
             _state.Actors.TryRemove(info.ActorNr, out _);
-            info.Fail(error);
+            RejectAuthorizedJoin(info, identity.User.Id, error);
             return;
         }
 
@@ -291,6 +291,23 @@ public sealed class KumoPlugin : PluginBase
         IpAddress = identity.Ip,
         Identity = identity,
     };
+
+    private void RejectAuthorizedJoin(ICallInfo info, string userId, string reason)
+    {
+        if (_api is not null && _state is not null)
+        {
+            try
+            {
+                _api.PlayerLeft(_state.GameId, userId);
+            }
+            catch (Exception ex)
+            {
+                _log?.Warn($"Kumo: failed to roll back rejected join presence: {ex.Message}");
+            }
+        }
+
+        info.Fail(reason);
+    }
 
     private static string? ExtractJoinToken(Dictionary<byte, object> parameters)
     {
