@@ -81,7 +81,12 @@ public sealed class KumoPlugin : PluginBase
             moderation,
             interest,
             interactions,
-            instantiation);
+            instantiation,
+            rateLimits,
+            new SharingService(host, log),
+            options.DiscoveryMode);
+        if (options.DiscoveryMode)
+            log.Info("Kumo: discovery mode on; unmapped 2026 event codes are relayed and logged.");
 
         rateLimits.Start();
         errorMsg = string.Empty;
@@ -103,11 +108,13 @@ public sealed class KumoPlugin : PluginBase
         info.Request.RoomFlags = 35;
         _state!.GameId = info.Request.GameId;
 
-        var identity = _authorization!.Authorize(
-            ExtractJoinToken(info.Request.Parameters),
-            info.UserId,
-            _state.GameId,
-            onCreate: true);
+        var identity = InLocalRoom
+            ? _authorization!.AuthorizeLocal(info.UserId)
+            : _authorization!.Authorize(
+                ExtractJoinToken(info.Request.Parameters),
+                info.UserId,
+                _state.GameId,
+                onCreate: true);
 
         if (!identity.Valid)
         {
@@ -115,7 +122,8 @@ public sealed class KumoPlugin : PluginBase
             return;
         }
 
-        _state.Capacity = identity.WorldCapacity;
+        // A local room has no world record behind it, so no capacity; it holds its one player.
+        _state.Capacity = Math.Max(1, identity.WorldCapacity);
         _state.WorldAuthor = identity.WorldAuthor ?? string.Empty;
         _state.InstanceCreator = identity.InstanceCreator ?? string.Empty;
 
@@ -140,11 +148,13 @@ public sealed class KumoPlugin : PluginBase
         if (!Ready(info))
             return;
 
-        var identity = _authorization!.Authorize(
-            ExtractJoinToken(info.Request.Parameters),
-            info.UserId,
-            _state!.GameId,
-            onCreate: false);
+        var identity = InLocalRoom
+            ? _authorization!.AuthorizeLocal(info.UserId)
+            : _authorization!.Authorize(
+                ExtractJoinToken(info.Request.Parameters),
+                info.UserId,
+                _state!.GameId,
+                onCreate: false);
 
         if (!identity.Valid)
         {
@@ -154,10 +164,10 @@ public sealed class KumoPlugin : PluginBase
 
         var isStaff = identity.User.Tags.Contains("admin_moderator");
         var isCapacityExempt = isStaff ||
-                               identity.User.Id == _state.WorldAuthor ||
+                               identity.User.Id == _state!.WorldAuthor ||
                                identity.User.Id == _state.InstanceCreator;
 
-        if (_state.Capacity > 0 && PluginHost.GameActors.Count >= _state.Capacity * 2 && !isCapacityExempt)
+        if (_state!.Capacity > 0 && PluginHost.GameActors.Count >= _state.Capacity * 2 && !isCapacityExempt)
         {
             RejectAuthorizedJoin(info, identity.User.Id, "Game is full.");
             return;
@@ -200,7 +210,7 @@ public sealed class KumoPlugin : PluginBase
 
     public override void OnLeave(ILeaveGameCallInfo info)
     {
-        if (_state is not null && _api is not null && _state.Actors.TryRemove(info.ActorNr, out var actor))
+        if (_state is not null && _api is not null && _state.Actors.TryRemove(info.ActorNr, out var actor) && !InLocalRoom)
         {
             try
             {
@@ -219,7 +229,7 @@ public sealed class KumoPlugin : PluginBase
     {
         _rateLimits?.Stop();
 
-        if (_state is not null && _api is not null)
+        if (_state is not null && _api is not null && !InLocalRoom)
         {
             try
             {
@@ -274,6 +284,12 @@ public sealed class KumoPlugin : PluginBase
         _events.Handle(info);
     }
 
+    /// <summary>
+    /// A local room's presence is not the API's business: it never placed the player there, and
+    /// reporting a leave or close for a room it does not know fails.
+    /// </summary>
+    private bool InLocalRoom => AuthorizationService.IsLocalRoom(_state?.GameId);
+
     private bool Ready(ICallInfo info)
     {
         if (_state is not null && _authorization is not null && _properties is not null)
@@ -293,7 +309,7 @@ public sealed class KumoPlugin : PluginBase
 
     private void RejectAuthorizedJoin(ICallInfo info, string userId, string reason)
     {
-        if (_api is not null && _state is not null)
+        if (_api is not null && _state is not null && !InLocalRoom)
         {
             try
             {

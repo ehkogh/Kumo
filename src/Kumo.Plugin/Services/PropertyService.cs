@@ -42,43 +42,33 @@ public sealed class PropertyService
         if (isPrivileged)
             result["modTag"] = string.Empty;
 
-        if (current["user"] is Dictionary<string, object> presentedUser &&
+        // Claims the player is not entitled to are dropped, never refused. The properties handed on
+        // are rebuilt here from the API's record, so leaving a claim out is already the whole
+        // defence; failing the operation as well only costs the player their connection. And
+        // clients send some of these fields routinely: the 2026 client includes modTag in the
+        // property block it joins with, and refusing it refused every join.
+
+        // A different, non-empty display name: honoured for staff only.
+        if (isPrivileged &&
+            current["user"] is Dictionary<string, object> presentedUser &&
             presentedUser.TryGetValue("displayName", out var displayNameValue) &&
             displayNameValue is string presentedName &&
-            !string.Equals(presentedName, identity.User.DisplayName, StringComparison.Ordinal))
+            presentedName.Length > 0)
         {
-            if (isPrivileged)
-                userProperties["displayName"] = presentedName;
-            else
-            {
-                error = "Can't set user->displayName";
-                return false;
-            }
+            userProperties["displayName"] = presentedName;
         }
 
-        if (current.ContainsKey("modTag") && current["modTag"] is not null)
-        {
-            if (!isPrivileged)
-            {
-                error = "Can't set modTag";
-                return false;
-            }
+        // An empty modTag claims nothing; a non-empty one is honoured for staff only.
+        if (isPrivileged && current["modTag"] is string modTag && modTag.Length > 0)
+            result["modTag"] = modTag;
 
-            result["modTag"] = current["modTag"];
-        }
-
-        if (current["isInvisible"] is bool invisible && invisible)
-        {
-            if (!isPrivileged)
-            {
-                error = "Can't set isInvisible";
-                return false;
-            }
-
+        if (isPrivileged && current["isInvisible"] is bool invisible && invisible)
             result["isInvisible"] = true;
-        }
 
+        // Avatar measurements the client reports. Both are needed to place a remote player: with
+        // only the eye height passed on, other players saw them floating above the ground.
         CopyIfPresent(current, result, "avatarEyeHeight");
+        CopyIfPresent(current, result, "avatarHipHeight");
         CopyBooleanIfPresent(current, result, "showSocialRank");
         CopyBooleanIfPresent(current, result, "inVRMode");
 
@@ -155,5 +145,9 @@ public sealed class PropertyService
         ["pluginUrlObject"] = new Dictionary<string, object>(),
         ["unityVersion"] = package.unityVersion,
         ["unitySortNumber"] = package.unitySortNumber,
+        ["variant"] = package.variant ?? "standard",
+        ["assetVersion"] = package.assetVersion,
+        ["performanceRating"] = package.performanceRating ?? "None",
+        ["scanStatus"] = package.scanStatus ?? "passed",
     };
 }

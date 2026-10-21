@@ -38,15 +38,18 @@ public sealed class RateLimitService
         _host.BroadcastEvent(new List<int> { actorNumber }, 0, EventCodes.RateLimits, data, 0);
     }
 
+    // Sent as the receiving actor, not actor 0. Actor 0 is not a player, and some clients discard
+    // an event that claims to come from it ("no valid originating player"); this form is the one
+    // proven against the 2026 client.
     private void Tick()
     {
         foreach (var actor in _state.Actors.Keys.ToArray())
         {
             _host.BroadcastEvent(
                 new List<int> { actor },
-                0,
+                actor,
                 EventCodes.RateLimitTick,
-                PhotonPayload.Wrap(0, null),
+                PhotonPayload.Wrap(actor, null),
                 0);
         }
     }

@@ -1,20 +1,43 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using Kumo.Plugin.Protocol;
 using Photon.Hive.Plugin;
 using Newtonsoft.Json;
 
 namespace Kumo.Plugin.Services;
 
+/// <summary>
+/// Decides what happens to every event a client raises: relay it, act on it, or drop it.
+/// </summary>
+/// <remarks>
+/// Only codes in <see cref="EventCodes"/> pass. In discovery mode (<c>DiscoveryMode="true"</c>),
+/// unknown codes inside the client's own range are relayed too, and every unmapped code has its
+/// first payloads logged, so a session keeps working while the 2026 table is mapped. Discovery
+/// mode is temporary; once the table is complete it goes.
+/// </remarks>
 public sealed class EventRouter
 {
+    /// <summary>How many payloads of each unmapped code to log per room.</summary>
+    private const int SamplesPerCode = 5;
+
     private readonly IPluginHost _host;
     private readonly IPluginLogger _log;
+    private readonly SharingService _sharing;
     private readonly PropertyService _properties;
     private readonly ProfileRefreshService _profiles;
     private readonly ModerationService _moderation;
     private readonly InterestService _interest;
     private readonly InteractionPermissionService _interactions;
     private readonly InstantiationService _instantiation;
+    private readonly RateLimitService _rateLimits;
+    private readonly bool _discovery;
+    private readonly ConcurrentDictionary<byte, int> _seen = new();
+
+    // Discovery mode: events and bytes per code, logged every TrafficWindow. Telling talking from
+    // silence this way is how a feature riding an existing code (voice) gets found.
+    private static readonly TimeSpan TrafficWindow = TimeSpan.FromSeconds(10);
+    private readonly ConcurrentDictionary<byte, (int Events, long Bytes)> _traffic = new();
+    private DateTime _trafficSince = DateTime.UtcNow;
 
     public EventRouter(
         IPluginHost host,
@@ -24,7 +47,10 @@ public sealed class EventRouter
         ModerationService moderation,
         InterestService interest,
         InteractionPermissionService interactions,
-        InstantiationService instantiation)
+        InstantiationService instantiation,
+        RateLimitService rateLimits,
+        SharingService sharing,
+        bool discovery)
     {
         _host = host;
         _log = log;
@@ -34,28 +60,62 @@ public sealed class EventRouter
         _interest = interest;
         _interactions = interactions;
         _instantiation = instantiation;
+        _rateLimits = rateLimits;
+        _sharing = sharing;
+        _discovery = discovery;
     }
 
     public void Handle(IRaiseEventCallInfo info)
     {
         info.Request.Cache = CacheOperations.DoNotCache;
+        var code = info.Request.EvCode;
 
-        switch (info.Request.EvCode)
+        // Discovery mode logs the first payloads of every code, known ones too: a feature that
+        // does not work may be riding on a code that is relayed fine but carries something new.
+        if (_discovery && IsMapped(code)) Sample(code, info, "relayed (mapped)");
+        if (_discovery) CountTraffic(code, info);
+
+        switch (code)
         {
+            // Server-only: a client raising one is impersonating the server.
             case 0:
             case EventCodes.ExecutiveMessage:
+            case EventCodes.RateLimitTick:
+                Sample(code, info, "refused (server event)");
                 info.Fail("Unauthorized.");
                 return;
 
+            case EventCodes.Movement:
+            case EventCodes.Sync:
+            case EventCodes.Unknown23:
+            case EventCodes.AvatarParameters:
             case EventCodes.Voice:
             case EventCodes.PastEvents:
             case EventCodes.SyncEvents:
             case EventCodes.InitialSyncFinished:
             case EventCodes.ProcessEvent:
-            case EventCodes.Serialization:
             case EventCodes.Udon:
             case EventCodes.AdditionalSync:
+            case EventCodes.Emoji:
+            case EventCodes.Chatbox:
+            case EventCodes.ChatboxTyping:
                 info.Continue();
+                return;
+
+            case EventCodes.ItemSpawn:
+                _sharing.Prepare(info);
+                info.Continue();
+                return;
+
+            case EventCodes.AvatarFile:
+                _profiles.Refresh(info.ActorNr);
+                info.Continue();
+                return;
+
+            case EventCodes.RateLimits:
+                // The client asking for the table: answer it, relay nothing.
+                _rateLimits.SendConfiguration(info.ActorNr);
+                info.Cancel();
                 return;
 
             case EventCodes.Interest:
@@ -64,11 +124,6 @@ public sealed class EventRouter
 
             case EventCodes.ExecutiveAction:
                 _moderation.Handle(info);
-                return;
-
-            case EventCodes.UserRecordUpdate:
-                _profiles.Refresh(info.ActorNr);
-                info.Cancel();
                 return;
 
             case EventCodes.Properties:
@@ -86,14 +141,20 @@ public sealed class EventRouter
                 return;
         }
 
-        if (info.Request.EvCode >= 200)
+        if (code >= 200)
         {
             info.Continue();
             return;
         }
 
-        _log.Warn($"Kumo: unknown event code {info.Request.EvCode} from actor {info.ActorNr}: " +
-                  JsonConvert.SerializeObject(info.Request.Data));
+        if (_discovery && code <= EventCodes.DiscoveryRange)
+        {
+            Sample(code, info, "relayed (discovery mode)");
+            info.Continue();
+            return;
+        }
+
+        Sample(code, info, "dropped");
         info.Cancel();
     }
 
@@ -114,5 +175,43 @@ public sealed class EventRouter
         _host.SetProperties(info.ActorNr, prepared, null, true);
         _properties.Broadcast(info.ActorNr, prepared);
         info.Cancel();
+    }
+
+    private static bool IsMapped(byte code) => code switch
+    {
+        EventCodes.Movement or EventCodes.Sync or EventCodes.Unknown23 or EventCodes.AvatarParameters or EventCodes.Voice
+            or EventCodes.PastEvents or EventCodes.SyncEvents or EventCodes.InitialSyncFinished or EventCodes.ProcessEvent
+            or EventCodes.Udon or EventCodes.AdditionalSync or EventCodes.ItemSpawn or EventCodes.Emoji or EventCodes.Chatbox
+            or EventCodes.ChatboxTyping or EventCodes.AvatarFile
+            or EventCodes.RateLimits or EventCodes.Interest or EventCodes.ExecutiveAction or EventCodes.Properties
+            or EventCodes.InteractionPermissions or EventCodes.Instantiate => true,
+        _ => code >= 200,
+    };
+
+    private void CountTraffic(byte code, IRaiseEventCallInfo info)
+    {
+        var size = info.Request.Data is byte[] bytes ? bytes.Length : 0;
+        _traffic.AddOrUpdate(code, (1, size), (_, t) => (t.Events + 1, t.Bytes + size));
+
+        var now = DateTime.UtcNow;
+        if (now - _trafficSince < TrafficWindow) return;
+        _trafficSince = now;
+        var summary = string.Join(", ", _traffic.OrderBy(t => t.Key)
+            .Select(t => $"{t.Key}: {t.Value.Events}ev/{t.Value.Bytes}B"));
+        _traffic.Clear();
+        _log.Info($"Kumo: traffic last {TrafficWindow.TotalSeconds:0}s (byte[] payloads only count bytes): {summary}");
+    }
+
+    /// <summary>Logs the first few payloads of each code, then only counts them.</summary>
+    private void Sample(byte code, IRaiseEventCallInfo info, string outcome)
+    {
+        var count = _seen.AddOrUpdate(code, 1, (_, n) => n + 1);
+        if (count > SamplesPerCode)
+            return;
+
+        var payload = info.Request.Data is byte[] bytes
+            ? Convert.ToBase64String(bytes, 0, Math.Min(bytes.Length, 512)) + (bytes.Length > 512 ? $"… ({bytes.Length} bytes)" : "")
+            : JsonConvert.SerializeObject(info.Request.Data);
+        _log.Info($"Kumo: event {code} from actor {info.ActorNr} {outcome} [{count}/{SamplesPerCode}]: {payload}");
     }
 }

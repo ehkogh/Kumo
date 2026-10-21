@@ -12,6 +12,12 @@ public sealed class ActorState
 
     public bool Instantiated { get; set; }
 
+    /// <summary>When the player's record was last re-read from the API, for throttling.</summary>
+    public DateTime LastProfileRefresh { get; set; } = DateTime.MinValue;
+
+    /// <summary>A throttled refresh is waiting to run.</summary>
+    public bool ProfileRefreshPending { get; set; }
+
     public HashSet<int> InteractionActors { get; } = new();
 
     public Dictionary<int, UserModeration> Moderations { get; } = new();

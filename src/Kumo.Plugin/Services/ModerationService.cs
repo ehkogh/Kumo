@@ -125,7 +125,11 @@ public sealed class ModerationService
         if (!_state.Actors.TryGetValue(sourceActor, out var source) ||
             !TryGetStringMatrix(data, ExecutiveActionFields.MainProperty, out var matrix) ||
             matrix.Length < 2)
+        {
+            _log.Warn($"Kumo: actor {sourceActor} sent moderation lists Kumo could not read " +
+                      $"({(data.TryGetValue(ExecutiveActionFields.MainProperty, out var raw) ? raw?.GetType().FullName : "missing")}).");
             return;
+        }
 
         var blockedUsers = new HashSet<string>(matrix[0]);
         var mutedUsers = new HashSet<string>(matrix[1]);
@@ -138,6 +142,7 @@ public sealed class ModerationService
 
             UpdateModeration(source, target, muted, blocked);
             SendReply(sourceActor, target.ActorNumber, blocked, muted);
+            _log.Info($"Kumo: moderation reply to actor {sourceActor} about actor {target.ActorNumber} (blocked={blocked}, muted={muted}).");
         }
     }
 
@@ -298,9 +303,13 @@ public sealed class ModerationService
         byte key,
         out string[][] value)
     {
-        if (data.TryGetValue(key, out var raw) && raw is string[][] matrix)
+        // The block and mute lists. Photon may hand them over as string[][] or as object[] of
+        // string[] (empty lists especially); requiring string[][] meant no reply was ever sent.
+        if (data.TryGetValue(key, out var raw) && raw is Array outer)
         {
-            value = matrix;
+            value = outer.Cast<object?>()
+                .Select(row => row is Array inner ? inner.Cast<object?>().Select(v => v?.ToString() ?? "").ToArray() : Array.Empty<string>())
+                .ToArray();
             return true;
         }
 

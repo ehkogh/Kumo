@@ -6,6 +6,12 @@ public sealed class KumoOptions
 
     public string ApiSecret { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Relay (and log) unmapped event codes inside the 2026 client's own range instead of
+    /// dropping them. For mapping the 2026 event table; off in normal operation.
+    /// </summary>
+    public bool DiscoveryMode { get; private set; }
+
     public static bool TryCreate(
         Dictionary<string, string> config,
         out KumoOptions options,
@@ -27,6 +33,8 @@ public sealed class KumoOptions
 
         options.ApiUrl = apiUrl.TrimEnd('/');
         options.ApiSecret = secret;
+        options.DiscoveryMode = config.TryGetValue("DiscoveryMode", out var discovery) &&
+                                bool.TryParse(discovery, out var enabled) && enabled;
         error = string.Empty;
         return true;
     }

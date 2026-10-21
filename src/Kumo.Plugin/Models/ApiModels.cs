@@ -69,5 +69,14 @@ public sealed class UnityPackageRecord
     public string pluginUrl = string.Empty;
     public Dictionary<string, object> pluginUrlObject = new();
     public string unityVersion = string.Empty;
-    public int unitySortNumber;
+
+    // VRChat's own format (20220322000) does not fit an int.
+    public long unitySortNumber;
+
+    // The 2026 client picks the package for its variant (standard, security, impostor) and fails
+    // with "Variant specific assetUrl was null" when none says which it is.
+    public string variant = "standard";
+    public int assetVersion;
+    public string performanceRating = "None";
+    public string scanStatus = "passed";
 }

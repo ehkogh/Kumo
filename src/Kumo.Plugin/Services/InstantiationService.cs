@@ -27,14 +27,14 @@ public sealed class InstantiationService
             return false;
         }
 
-        if (data[0] is not string prefab || string.IsNullOrWhiteSpace(prefab))
+        if (Field(data, 0) is not string prefab || string.IsNullOrWhiteSpace(prefab))
         {
             info.Fail("Invalid instantiate prefab.");
             return false;
         }
 
-        var viewIds = data[4] as int[] ?? Array.Empty<int>();
-        var mainViewId = data[7] is int main ? main : 0;
+        var viewIds = Field(data, 4) as int[] ?? Array.Empty<int>();
+        var mainViewId = Field(data, 7) is int main ? main : 0;
 
         var start = info.ActorNr * 100000;
         var allowed = new HashSet<int> { start + 1, start + 2, start + 3, start + 4 };
@@ -67,6 +67,12 @@ public sealed class InstantiationService
         info.Continue();
         return true;
     }
+
+    /// <summary>
+    /// The client keys the instantiate data with bytes. A Hashtable never matches an int key to a
+    /// byte one, so <c>data[0]</c> read nothing and every player's instantiate was refused.
+    /// </summary>
+    private static object? Field(Hashtable data, byte key) => data[key] ?? data[(int)key];
 
     private void Reject(IRaiseEventCallInfo info, string reason)
     {
