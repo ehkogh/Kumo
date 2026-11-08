@@ -18,6 +18,12 @@ public sealed class KumoOptions
     /// </summary>
     public string PersistencePath { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Diagnostics: view ids whose every sync bunch (10/11) and ownership change (22) is logged in
+    /// full. Comma-separated; empty in normal operation.
+    /// </summary>
+    public int[] TraceViews { get; private set; } = Array.Empty<int>();
+
     public static bool TryCreate(
         Dictionary<string, string> config,
         out KumoOptions options,
@@ -41,6 +47,9 @@ public sealed class KumoOptions
         options.ApiSecret = secret;
         options.DiscoveryMode = config.TryGetValue("DiscoveryMode", out var discovery) &&
                                 bool.TryParse(discovery, out var enabled) && enabled;
+        options.TraceViews = config.TryGetValue("TraceViews", out var traceViews)
+            ? traceViews.Split(',').Select(v => int.TryParse(v.Trim(), out var id) ? id : -1).Where(id => id >= 0).ToArray()
+            : Array.Empty<int>();
         options.PersistencePath = config.TryGetValue("PersistencePath", out var persistence) && !string.IsNullOrWhiteSpace(persistence)
             ? persistence
             : Path.Combine(Path.GetDirectoryName(typeof(KumoOptions).Assembly.Location) ?? ".", "persistence");

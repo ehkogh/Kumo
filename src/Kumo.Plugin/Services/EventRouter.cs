@@ -33,6 +33,9 @@ public sealed class EventRouter
     private readonly PersistenceService _persistence;
     private readonly OwnershipService _ownership;
     private readonly bool _discovery;
+
+    /// <summary>Diagnostics: see <see cref="Configuration.KumoOptions.TraceViews"/>.</summary>
+    public int[] TraceViews { get; set; } = Array.Empty<int>();
     private readonly ConcurrentDictionary<byte, int> _seen = new();
 
     // Discovery mode: events and bytes per code, logged every TrafficWindow. Telling talking from
@@ -119,6 +122,8 @@ public sealed class EventRouter
 
             case EventCodes.UdonSyncControl:
             case EventCodes.UdonVariableSync:
+                if (TraceViews.Length > 0 && info.Request.Data is byte[] { Length: >= 4 } traced && TraceViews.Contains(BitConverter.ToInt32(traced, 0)))
+                    _log.Info($"Kumo: trace ev {code} from {info.ActorNr}: {Convert.ToBase64String(traced)}");
                 _persistence.OnBunch(info.ActorNr, code, info.Request.Data);
                 info.Continue();
                 return;

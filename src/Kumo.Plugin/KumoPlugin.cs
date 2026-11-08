@@ -92,7 +92,7 @@ public sealed class KumoPlugin : PluginBase
             new SharingService(host, log),
             persistence,
             ownership,
-            options.DiscoveryMode);
+            options.DiscoveryMode) { TraceViews = options.TraceViews };
         if (options.DiscoveryMode)
             log.Info("Kumo: discovery mode on; unmapped 2026 event codes are relayed and logged.");
 
