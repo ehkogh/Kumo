@@ -84,10 +84,11 @@ public static class EventCodes
     public const byte InteractionPermissions = 60;
 
     /// <summary>
-    /// New in 2026: the avatar file a player is loading, <c>{0: fileId, 1: version, 2: variant,
-    /// 3: ?}</c>, raised when they change avatar. The server re-reads the player from the API so
-    /// the room's properties name the new avatar (the client defers to those); also relayed.
-    /// This is the 2026 counterpart of 2022's user-record update (40).
+    /// New in 2026: a content token request for the file a player is about to download,
+    /// <c>{0: fileId, 1: version, 2: variant, 3: ?}</c>. The server answers on the same code
+    /// (ContentTokenService); unanswered, the client waits 30 s before every in-room avatar
+    /// download. Not relayed: other clients reject it. The server also re-reads the player from
+    /// the API, since a new avatar is the usual reason for the request.
     /// </summary>
     public const byte AvatarFile = 73;
 

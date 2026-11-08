@@ -32,6 +32,7 @@ public sealed class EventRouter
     private readonly RateLimitService _rateLimits;
     private readonly PersistenceService _persistence;
     private readonly OwnershipService _ownership;
+    private readonly ContentTokenService _tokens;
     private readonly bool _discovery;
 
     /// <summary>Diagnostics: see <see cref="Configuration.KumoOptions.TraceViews"/>.</summary>
@@ -61,6 +62,7 @@ public sealed class EventRouter
     {
         _persistence = persistence;
         _ownership = ownership;
+        _tokens = new ContentTokenService(host, log);
         _host = host;
         _log = log;
         _properties = properties;
@@ -138,8 +140,10 @@ public sealed class EventRouter
                 return;
 
             case EventCodes.AvatarFile:
+                // A content token request, for the server only (ContentTokenService).
+                info.Cancel();
                 _profiles.Refresh(info.ActorNr);
-                info.Continue();
+                _tokens.Answer(info.ActorNr, info.Request.Data);
                 return;
 
             case EventCodes.RateLimits:
