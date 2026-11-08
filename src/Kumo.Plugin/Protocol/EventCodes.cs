@@ -51,6 +51,12 @@ public static class EventCodes
     /// <summary>New in 2026, payload <c>[[]]</c> on join; meaning unknown. Relayed.</summary>
     public const byte Unknown23 = 23;
 
+    /// <summary>
+    /// Ownership: <c>[viewId, newOwner]</c>. Clients raise it to take an object; the server
+    /// records it and announces it to everyone as actor 0 (OwnershipService). The client handles
+    /// it with the same code as 210.
+    /// </summary>
+    public const byte OwnershipTransfer = 22;
 
     /// <summary>
     /// New in 2026: the joiner's persistence metadata, raised once after 23:

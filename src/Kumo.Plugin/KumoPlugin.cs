@@ -20,6 +20,7 @@ public sealed class KumoPlugin : PluginBase
     private InteractionPermissionService? _interactions;
     private EventRouter? _events;
     private PersistenceService? _persistence;
+    private OwnershipService? _ownership;
 
     public override string Name => "Kumo";
 
@@ -67,6 +68,8 @@ public sealed class KumoPlugin : PluginBase
         var instantiation = new InstantiationService(state, host, log);
         var persistence = new PersistenceService(state, host, log, new FilePersistenceStore(options.PersistencePath));
         _persistence = persistence;
+        var ownership = new OwnershipService(state, host, log);
+        _ownership = ownership;
 
         _state = state;
         _api = api;
@@ -88,6 +91,7 @@ public sealed class KumoPlugin : PluginBase
             rateLimits,
             new SharingService(host, log),
             persistence,
+            ownership,
             options.DiscoveryMode);
         if (options.DiscoveryMode)
             log.Info("Kumo: discovery mode on; unmapped 2026 event codes are relayed and logged.");
@@ -212,11 +216,14 @@ public sealed class KumoPlugin : PluginBase
         _moderation.RequestNewActorFromOthers(info.ActorNr);
         _rateLimits!.SendConfiguration(info.ActorNr);
         _interactions!.Announce();
+        _ownership!.SendAll(info.ActorNr);
     }
 
     public override void OnLeave(ILeaveGameCallInfo info)
     {
         _persistence?.OnLeave(info.ActorNr);
+        var nextMaster = PluginHost.GameActorsActive.Select(a => a.ActorNr).Where(a => a != info.ActorNr).DefaultIfEmpty(0).Min();
+        _ownership?.OnLeave(info.ActorNr, PluginHost.MasterClientId != info.ActorNr && PluginHost.MasterClientId != 0 ? PluginHost.MasterClientId : nextMaster);
         if (_state is not null && _api is not null && _state.Actors.TryRemove(info.ActorNr, out var actor) && !InLocalRoom)
         {
             try

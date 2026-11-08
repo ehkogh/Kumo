@@ -31,6 +31,7 @@ public sealed class EventRouter
     private readonly InstantiationService _instantiation;
     private readonly RateLimitService _rateLimits;
     private readonly PersistenceService _persistence;
+    private readonly OwnershipService _ownership;
     private readonly bool _discovery;
     private readonly ConcurrentDictionary<byte, int> _seen = new();
 
@@ -52,9 +53,11 @@ public sealed class EventRouter
         RateLimitService rateLimits,
         SharingService sharing,
         PersistenceService persistence,
+        OwnershipService ownership,
         bool discovery)
     {
         _persistence = persistence;
+        _ownership = ownership;
         _host = host;
         _log = log;
         _properties = properties;
@@ -118,6 +121,10 @@ public sealed class EventRouter
             case EventCodes.UdonVariableSync:
                 _persistence.OnBunch(info.ActorNr, code, info.Request.Data);
                 info.Continue();
+                return;
+
+            case EventCodes.OwnershipTransfer:
+                _ownership.Handle(info);
                 return;
 
             case EventCodes.ItemSpawn:
@@ -201,7 +208,7 @@ public sealed class EventRouter
             or EventCodes.UdonSyncControl or EventCodes.UdonVariableSync
             or EventCodes.PastEvents or EventCodes.SyncEvents or EventCodes.InitialSyncFinished or EventCodes.ProcessEvent
             or EventCodes.Udon or EventCodes.AdditionalSync or EventCodes.ItemSpawn or EventCodes.Emoji or EventCodes.Chatbox
-            or EventCodes.ChatboxTyping or EventCodes.AvatarFile or EventCodes.WorldMetadata
+            or EventCodes.ChatboxTyping or EventCodes.AvatarFile or EventCodes.WorldMetadata or EventCodes.OwnershipTransfer
             or EventCodes.RateLimits or EventCodes.Interest or EventCodes.ExecutiveAction or EventCodes.Properties
             or EventCodes.InteractionPermissions or EventCodes.Instantiate => true,
         _ => code >= 200,
