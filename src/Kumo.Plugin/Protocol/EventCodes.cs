@@ -28,6 +28,12 @@ public static class EventCodes
     /// <summary>Client view-interest updates; the server replies with a Boolean on the same code.</summary>
     public const byte Interest = 8;
 
+    /// <summary>Udon/object sync startup traffic observed in Elevator Anomaly; payload schema unconfirmed.</summary>
+    public const byte UdonSyncControl = 10;
+
+    /// <summary>Udon variable sync observed carrying SeasonHalloweenRecompense and TimeGamePlaying.</summary>
+    public const byte UdonVariableSync = 11;
+
     /// <summary>Binary sync of players and networked objects, periodic; relayed. (2022: 9.)</summary>
     public const byte Sync = 12;
 
@@ -44,6 +50,14 @@ public static class EventCodes
 
     /// <summary>New in 2026, payload <c>[[]]</c> on join; meaning unknown. Relayed.</summary>
     public const byte Unknown23 = 23;
+
+
+    /// <summary>
+    /// New in 2026: the joiner's persistence metadata, raised once after 23:
+    /// <c>[1, 0, byte[] gzip([int32 length][FlatBuffers32 WorldMetadata])]</c>. The server
+    /// records it and restores the player (PersistenceService). Not relayed.
+    /// </summary>
+    public const byte WorldMetadata = 25;
 
     /// <summary>
     /// Moderation. The server sends actions (warn, kick, mic off) and requests each joiner's block
@@ -119,6 +133,35 @@ public static class EventCodes
 
     /// <summary>Per-second rate-limit tick.</summary>
     public const byte RateLimitTick = 35;
+
+    // The two below were read from the client's network event dispatcher (GameAssembly RVA
+    // 0x1e469b0, build 2026.3.3p2-1921), which handles 8, 12, 18, 20-22, 24, 26-29, 33, 61, 74,
+    // 197, 198, 209 and 210 from the server.
+
+    /// <summary>
+    /// Serialization recovery for late joiners. Parameter 245 is <c>object[4]</c>:
+    /// <c>[int, int, int, byte[]]</c> (the ints look like id, part, part count; parts are
+    /// reassembled by <c>SerializationRecoveryHandler</c>); the bytes are gzip of a FlatBuffers32
+    /// <c>WorldMetadata</c>, and each <c>ObjectMetadataPair</c> in it is re-dispatched locally
+    /// as event 198 from sender 0 (the client then finds the view and applies the bunches).
+    /// Sent as actor 0 by PersistenceService with players' persistence objects.
+    /// </summary>
+    public const byte SerializationRecovery = 24;
+
+    /// <summary>
+    /// A player's persistence has been restored. Parameter 245: that player's actor number
+    /// (Int32). The client raises Udon's <c>_onPlayerRestored</c> for that player and marks it
+    /// restored; worlds wait for it. Found by the "_onPlayerRestored" literal being loaded in
+    /// this handler. See PersistenceService.
+    /// </summary>
+    public const byte PlayerRestored = 28;
+
+    /// <summary>
+    /// Sets a per-player Boolean on the sender's VRCPlayer (field 0x4a); the client ignores
+    /// <c>true</c> for the local player. Meaning unknown. It is NOT persistence-restored: a
+    /// session sending it after 25 changed nothing in Udon. Never sent.
+    /// </summary>
+    public const byte PlayerFlag26 = 26;
 }
 
 public static class ExecutiveActionFields

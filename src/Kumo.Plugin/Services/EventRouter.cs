@@ -30,6 +30,7 @@ public sealed class EventRouter
     private readonly InteractionPermissionService _interactions;
     private readonly InstantiationService _instantiation;
     private readonly RateLimitService _rateLimits;
+    private readonly PersistenceService _persistence;
     private readonly bool _discovery;
     private readonly ConcurrentDictionary<byte, int> _seen = new();
 
@@ -50,8 +51,10 @@ public sealed class EventRouter
         InstantiationService instantiation,
         RateLimitService rateLimits,
         SharingService sharing,
+        PersistenceService persistence,
         bool discovery)
     {
+        _persistence = persistence;
         _host = host;
         _log = log;
         _properties = properties;
@@ -81,6 +84,9 @@ public sealed class EventRouter
             case 0:
             case EventCodes.ExecutiveMessage:
             case EventCodes.RateLimitTick:
+            case EventCodes.SerializationRecovery:
+            case EventCodes.PlayerFlag26:
+            case EventCodes.PlayerRestored:
                 Sample(code, info, "refused (server event)");
                 info.Fail("Unauthorized.");
                 return;
@@ -99,6 +105,18 @@ public sealed class EventRouter
             case EventCodes.Emoji:
             case EventCodes.Chatbox:
             case EventCodes.ChatboxTyping:
+                info.Continue();
+                return;
+
+            case EventCodes.WorldMetadata:
+                // For the server's state manager; clients have no handler for it.
+                info.Cancel();
+                _persistence.OnWorldMetadata(info.ActorNr, info.Request.Data);
+                return;
+
+            case EventCodes.UdonSyncControl:
+            case EventCodes.UdonVariableSync:
+                _persistence.OnBunch(info.ActorNr, code, info.Request.Data);
                 info.Continue();
                 return;
 
@@ -180,9 +198,10 @@ public sealed class EventRouter
     private static bool IsMapped(byte code) => code switch
     {
         EventCodes.Movement or EventCodes.Sync or EventCodes.Unknown23 or EventCodes.AvatarParameters or EventCodes.Voice
+            or EventCodes.UdonSyncControl or EventCodes.UdonVariableSync
             or EventCodes.PastEvents or EventCodes.SyncEvents or EventCodes.InitialSyncFinished or EventCodes.ProcessEvent
             or EventCodes.Udon or EventCodes.AdditionalSync or EventCodes.ItemSpawn or EventCodes.Emoji or EventCodes.Chatbox
-            or EventCodes.ChatboxTyping or EventCodes.AvatarFile
+            or EventCodes.ChatboxTyping or EventCodes.AvatarFile or EventCodes.WorldMetadata
             or EventCodes.RateLimits or EventCodes.Interest or EventCodes.ExecutiveAction or EventCodes.Properties
             or EventCodes.InteractionPermissions or EventCodes.Instantiate => true,
         _ => code >= 200,

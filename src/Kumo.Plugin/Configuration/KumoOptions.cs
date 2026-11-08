@@ -12,6 +12,12 @@ public sealed class KumoOptions
     /// </summary>
     public bool DiscoveryMode { get; private set; }
 
+    /// <summary>
+    /// Where player persistence (PlayerData, PlayerObjects) is kept: one JSON file per world and
+    /// user. Defaults to a "persistence" folder beside the plugin.
+    /// </summary>
+    public string PersistencePath { get; private set; } = string.Empty;
+
     public static bool TryCreate(
         Dictionary<string, string> config,
         out KumoOptions options,
@@ -35,6 +41,9 @@ public sealed class KumoOptions
         options.ApiSecret = secret;
         options.DiscoveryMode = config.TryGetValue("DiscoveryMode", out var discovery) &&
                                 bool.TryParse(discovery, out var enabled) && enabled;
+        options.PersistencePath = config.TryGetValue("PersistencePath", out var persistence) && !string.IsNullOrWhiteSpace(persistence)
+            ? persistence
+            : Path.Combine(Path.GetDirectoryName(typeof(KumoOptions).Assembly.Location) ?? ".", "persistence");
         error = string.Empty;
         return true;
     }

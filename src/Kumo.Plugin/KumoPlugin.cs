@@ -19,6 +19,7 @@ public sealed class KumoPlugin : PluginBase
     private RateLimitService? _rateLimits;
     private InteractionPermissionService? _interactions;
     private EventRouter? _events;
+    private PersistenceService? _persistence;
 
     public override string Name => "Kumo";
 
@@ -64,6 +65,8 @@ public sealed class KumoPlugin : PluginBase
         var profiles = new ProfileRefreshService(state, api, host, properties);
         var interest = new InterestService(host, log);
         var instantiation = new InstantiationService(state, host, log);
+        var persistence = new PersistenceService(state, host, log, new FilePersistenceStore(options.PersistencePath));
+        _persistence = persistence;
 
         _state = state;
         _api = api;
@@ -84,11 +87,14 @@ public sealed class KumoPlugin : PluginBase
             instantiation,
             rateLimits,
             new SharingService(host, log),
+            persistence,
             options.DiscoveryMode);
         if (options.DiscoveryMode)
             log.Info("Kumo: discovery mode on; unmapped 2026 event codes are relayed and logged.");
 
         rateLimits.Start();
+        persistence.Start();
+        log.Info($"Kumo: player persistence stored in {options.PersistencePath}");
         errorMsg = string.Empty;
         return true;
     }
@@ -210,6 +216,7 @@ public sealed class KumoPlugin : PluginBase
 
     public override void OnLeave(ILeaveGameCallInfo info)
     {
+        _persistence?.OnLeave(info.ActorNr);
         if (_state is not null && _api is not null && _state.Actors.TryRemove(info.ActorNr, out var actor) && !InLocalRoom)
         {
             try
@@ -228,6 +235,7 @@ public sealed class KumoPlugin : PluginBase
     public override void OnCloseGame(ICloseGameCallInfo info)
     {
         _rateLimits?.Stop();
+        _persistence?.OnClose();
 
         if (_state is not null && _api is not null && !InLocalRoom)
         {
