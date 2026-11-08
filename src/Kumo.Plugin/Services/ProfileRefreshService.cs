@@ -8,14 +8,15 @@ namespace Kumo.Plugin.Services;
 
 /// <summary>
 /// Re-reads a player's record from the API when their client says it changed, and broadcasts
-/// the result if it did.
+/// the result if it did; if it did not, the result goes back to that player alone.
 /// </summary>
 /// <remarks>
 /// Every broadcast makes every other client treat the player's avatar as newly chosen and restart
 /// its download. With two 2026 clients in a room that became a loop: each update made the other
 /// client raise the update event again, about three times a second, so neither avatar ever
 /// finished loading. So the API is asked at most once a second per player, and nothing is
-/// broadcast unless the record actually changed.
+/// broadcast unless the record actually changed. The player who asked is always answered (see
+/// <see cref="Refresh"/>).
 /// </remarks>
 public sealed class ProfileRefreshService
 {
@@ -76,11 +77,18 @@ public sealed class ProfileRefreshService
         var changed = !SameRecord(actor.Identity, updated);
         actor.Identity = updated;
         actor.IpAddress = updated.Ip;
-        if (!changed)
-            return;
 
         if (!_properties.TryPrepare(actorNumber, current.Properties.GetProperties(), out var prepared, out _))
             return;
+
+        if (!changed)
+        {
+            // The player still gets an answer: after announcing an avatar (event 73) the 2026
+            // client waits for the server's properties before it requests the file, and without
+            // them every avatar sat 30 seconds first. naoka answered every update this way.
+            _properties.SendTo(actorNumber, actorNumber, prepared);
+            return;
+        }
 
         _host.SetProperties(actorNumber, prepared, null, true);
         _properties.Broadcast(actorNumber, prepared);

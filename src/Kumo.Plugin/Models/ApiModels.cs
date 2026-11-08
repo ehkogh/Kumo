@@ -44,6 +44,7 @@ public sealed class UserRecord
 public sealed class AvatarRecord
 {
     public string id = string.Empty;
+    public string offlineAnalysisScanStatus = "unknown";
     public string assetUrl = string.Empty;
     public string authorId = string.Empty;
     public string authorName = string.Empty;

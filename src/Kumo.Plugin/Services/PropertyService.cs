@@ -85,6 +85,12 @@ public sealed class PropertyService
         _host.BroadcastEvent(0, actorNumber, 0, 42, Protocol.PhotonPayload.Wrap(actorNumber, properties), 0);
     }
 
+    /// <summary>A player's properties (event 42), to one client only.</summary>
+    public void SendTo(int receiver, int actorNumber, Hashtable properties)
+    {
+        _host.BroadcastEvent(new List<int> { receiver }, actorNumber, 42, Protocol.PhotonPayload.Wrap(actorNumber, properties), 0);
+    }
+
     private static bool IsPrivileged(UserRecord user) =>
         user.Tags.Contains("admin_moderator") || user.DeveloperType == "internal";
 
@@ -119,6 +125,7 @@ public sealed class PropertyService
     private static Dictionary<string, object> ToAvatarProperties(AvatarRecord avatar) => new()
     {
         ["id"] = avatar.id,
+        ["offlineAnalysisScanStatus"] = avatar.offlineAnalysisScanStatus,
         ["assetUrl"] = avatar.assetUrl,
         ["authorId"] = avatar.authorId,
         ["authorName"] = avatar.authorName,
