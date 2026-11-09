@@ -68,6 +68,10 @@ public sealed class LegacyBackendApiClient : IKumoApiClient
             })).ToList();
     }
 
+    public PurchaseChanges? GetPurchaseChanges(string worldId, long? since) =>
+        Get<PurchaseChanges>("/api/1/photon/purchases/changed", ("secret", _options.ApiSecret), ("worldId", worldId),
+            ("since", since?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? ""));
+
     private T? Get<T>(string path, params (string Key, string Value)[] query)
     {
         var body = GetString(path, query);

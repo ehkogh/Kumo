@@ -20,6 +20,7 @@ public sealed class KumoPlugin : PluginBase
     private InteractionPermissionService? _interactions;
     private EventRouter? _events;
     private PersistenceService? _persistence;
+    private PurchaseService? _purchases;
     private OwnershipService? _ownership;
 
     public override string Name => "Kumo";
@@ -71,6 +72,7 @@ public sealed class KumoPlugin : PluginBase
         var ownership = new OwnershipService(state, host, log);
         _ownership = ownership;
         var purchases = AuthorizationService.IsLocalRoom(state.GameId) ? null : new PurchaseService(state, api, host, log);
+        _purchases = purchases;
 
         _state = state;
         _api = api;
@@ -103,6 +105,7 @@ public sealed class KumoPlugin : PluginBase
 
         rateLimits.Start();
         persistence.Start();
+        purchases?.Start();
         log.Info($"Kumo: player persistence stored in {options.PersistencePath}");
         errorMsg = string.Empty;
         return true;
@@ -247,6 +250,7 @@ public sealed class KumoPlugin : PluginBase
     public override void OnCloseGame(ICloseGameCallInfo info)
     {
         _rateLimits?.Stop();
+        _purchases?.Stop();
         _persistence?.OnClose();
 
         if (_state is not null && _api is not null && !InLocalRoom)

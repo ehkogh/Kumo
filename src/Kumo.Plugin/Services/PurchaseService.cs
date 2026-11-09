@@ -28,6 +28,41 @@ public sealed class PurchaseService
         _log = log;
     }
 
+    private const int PollMilliseconds = 3000;
+
+    private object? _timer;
+    private long? _since;
+
+    /// <summary>
+    /// Purchases made (or run out) while players are in the room: VRCat is asked every few
+    /// seconds who changed, and their event 51 goes out again, so a world unlocks without a rejoin.
+    /// </summary>
+    public void Start() => _timer ??= _host.CreateTimer(Poll, PollMilliseconds, PollMilliseconds);
+
+    public void Stop()
+    {
+        if (_timer is null) return;
+        _host.StopTimer(_timer);
+        _timer = null;
+    }
+
+    private void Poll()
+    {
+        try
+        {
+            if (_api.GetPurchaseChanges(_state.GameId, _since) is not { } changes) return;
+            _since = changes.Now;
+            if (changes.UserIds.Count == 0) return;
+            var everyone = _state.Actors.Keys.ToList();
+            foreach (var actor in _state.Actors.Values.Where(a => changes.UserIds.Contains(a.UserId)).ToList())
+                Send(actor.ActorNumber, actor.UserId, everyone);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"Kumo: purchase poll failed: {ex.Message}");
+        }
+    }
+
     public void OnWorldLoaded(int actor)
     {
         if (!_state.Actors.TryGetValue(actor, out var joiner)) return;
