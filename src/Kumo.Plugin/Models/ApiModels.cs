@@ -39,6 +39,17 @@ public sealed class UserRecord
     public string Bio = string.Empty;
     public IList<string> Tags = new List<string>();
     public bool AllowAvatarCopying;
+
+    // Age verification, shown on the player's in-game profile (built from the room properties).
+    public bool AgeVerified;
+    public bool IsAdult;
+    public string AgeVerificationStatus = "hidden";
+
+    // Everything else the API puts on the record (iconUrl, iconType, profilePicOverride, the
+    // decorations, banner fields…). Passed on to the room's user properties, so a field the 2026
+    // client reads there is never dropped here just because this list did not name it.
+    [JsonExtensionData]
+    public IDictionary<string, Newtonsoft.Json.Linq.JToken> Extra = new Dictionary<string, Newtonsoft.Json.Linq.JToken>();
 }
 
 public sealed class AvatarRecord

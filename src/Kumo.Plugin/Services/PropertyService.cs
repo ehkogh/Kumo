@@ -106,7 +106,29 @@ public sealed class PropertyService
             target[key] = value;
     }
 
-    private static Dictionary<string, object> ToUserProperties(UserRecord user) => new()
+    private static Dictionary<string, object> ToUserProperties(UserRecord user)
+    {
+        var properties = KnownUserProperties(user);
+        // Plain text and true/false fields only: Photon carries those as-is.
+        foreach (var entry in user.Extra)
+        {
+            var key = entry.Key;
+            var value = entry.Value;
+            if (value is null || properties.ContainsKey(key)) continue;
+            switch (value.Type)
+            {
+                case Newtonsoft.Json.Linq.JTokenType.String:
+                    properties[key] = (string)value!;
+                    break;
+                case Newtonsoft.Json.Linq.JTokenType.Boolean:
+                    properties[key] = (bool)value;
+                    break;
+            }
+        }
+        return properties;
+    }
+
+    private static Dictionary<string, object> KnownUserProperties(UserRecord user) => new()
     {
         ["id"] = user.Id,
         ["displayName"] = user.DisplayName,
@@ -120,6 +142,11 @@ public sealed class PropertyService
         ["bio"] = user.Bio,
         ["tags"] = user.Tags,
         ["allowAvatarCopying"] = user.AllowAvatarCopying,
+        // The game's in-room profile reads these from here: without them it offered "Get Age
+        // Verified" to players the API reports as verified.
+        ["ageVerified"] = user.AgeVerified,
+        ["isAdult"] = user.IsAdult,
+        ["ageVerificationStatus"] = user.AgeVerificationStatus,
     };
 
     private static Dictionary<string, object> ToAvatarProperties(AvatarRecord avatar) => new()
