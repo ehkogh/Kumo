@@ -139,6 +139,12 @@ public sealed class EventRouter
                 info.Continue();
                 return;
 
+            case EventCodes.UserUpdate:
+                // An avatar switch (or another profile change) the API already has.
+                info.Cancel();
+                _profiles.Refresh(info.ActorNr);
+                return;
+
             case EventCodes.AvatarFile:
                 // A content token request, for the server only (ContentTokenService).
                 info.Cancel();
@@ -219,7 +225,7 @@ public sealed class EventRouter
             or EventCodes.Udon or EventCodes.AdditionalSync or EventCodes.ItemSpawn or EventCodes.Emoji or EventCodes.Chatbox
             or EventCodes.ChatboxTyping or EventCodes.AvatarFile or EventCodes.WorldMetadata or EventCodes.OwnershipTransfer
             or EventCodes.RateLimits or EventCodes.Interest or EventCodes.ExecutiveAction or EventCodes.Properties
-            or EventCodes.InteractionPermissions or EventCodes.Instantiate => true,
+            or EventCodes.InteractionPermissions or EventCodes.Instantiate or EventCodes.UserUpdate => true,
         _ => code >= 200,
     };
 

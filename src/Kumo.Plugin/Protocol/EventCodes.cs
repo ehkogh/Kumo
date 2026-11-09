@@ -77,6 +77,14 @@ public static class EventCodes
     /// </summary>
     public const byte RateLimits = 34;
 
+    /// <summary>
+    /// "My record changed, read it again": the 2026 client raises this (payload <c>1</c>) after
+    /// every avatar switch, once its <c>PUT /avatars/{id}/select</c> has gone through. The server
+    /// re-reads the player from the API and sends the new properties (ProfileRefreshService);
+    /// without that the new avatar never reached anyone, the player included. Not relayed.
+    /// </summary>
+    public const byte UserUpdate = 40;
+
     /// <summary>Player properties (eye and hip height from clients; the full set from the server).</summary>
     public const byte Properties = 42;
 
