@@ -49,6 +49,25 @@ public sealed class LegacyBackendApiClient : IKumoApiClient
             ("secret", _options.ApiSecret),
             ("roomId", roomId));
 
+    public List<Dictionary<string, object>> GetPurchases(string userId, string worldId)
+    {
+        var body = GetString("/api/1/photon/purchases", ("secret", _options.ApiSecret), ("userId", userId), ("worldId", worldId));
+        // Dates stay strings: OpenPhoton's serializer has no DateTime (the first event 51 was
+        // dropped for "No GpBinary V18 mapping for System.DateTime").
+        var records = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(body,
+            new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) ?? new();
+        // Photon carries plain values only: longs become ints, anything else a string.
+        return records.Select(record => record.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value switch
+            {
+                long n and >= int.MinValue and <= int.MaxValue => (object)(int)n,
+                string or bool or int or double => pair.Value,
+                null => "",
+                var v => v.ToString() ?? "",
+            })).ToList();
+    }
+
     private T? Get<T>(string path, params (string Key, string Value)[] query)
     {
         var body = GetString(path, query);

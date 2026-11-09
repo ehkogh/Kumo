@@ -119,6 +119,15 @@ public static class EventCodes
     /// <summary>New in 2026: chatbox text, payload the message as a string. Relayed.</summary>
     public const byte Chatbox = 43;
 
+    /// <summary>
+    /// World purchases, server to clients: <c>[int actor, bool, Dictionary&lt;string, object&gt;[]
+    /// products]</c>. The client turns the records into products and fires the world's
+    /// <c>_onPurchasesLoaded(products, player)</c>; it never does so from its own licenses.
+    /// Found in the "executive message" dispatcher, 2026.4.1p1 (52 and 53 go to the same world-
+    /// store class, path-targeted; not sent yet). See PurchaseService.
+    /// </summary>
+    public const byte Purchases = 51;
+
     /// <summary>New in 2026: chatbox typing indicator, payload a small int (state). Relayed.</summary>
     public const byte ChatboxTyping = 44;
 

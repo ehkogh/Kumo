@@ -45,6 +45,9 @@ public sealed class EventRouter
     private readonly ConcurrentDictionary<byte, (int Events, long Bytes)> _traffic = new();
     private DateTime _trafficSince = DateTime.UtcNow;
 
+    /// <summary>A player's world has loaded (event 25): what is sent then (purchases).</summary>
+    public Action<int>? WorldLoaded { get; set; }
+
     public EventRouter(
         IPluginHost host,
         IPluginLogger log,
@@ -120,6 +123,7 @@ public sealed class EventRouter
                 // For the server's state manager; clients have no handler for it.
                 info.Cancel();
                 _persistence.OnWorldMetadata(info.ActorNr, info.Request.Data);
+                WorldLoaded?.Invoke(info.ActorNr);
                 return;
 
             case EventCodes.UdonSyncControl:

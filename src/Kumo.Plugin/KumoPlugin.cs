@@ -70,6 +70,7 @@ public sealed class KumoPlugin : PluginBase
         _persistence = persistence;
         var ownership = new OwnershipService(state, host, log);
         _ownership = ownership;
+        var purchases = AuthorizationService.IsLocalRoom(state.GameId) ? null : new PurchaseService(state, api, host, log);
 
         _state = state;
         _api = api;
@@ -92,7 +93,11 @@ public sealed class KumoPlugin : PluginBase
             new SharingService(host, log),
             persistence,
             ownership,
-            options.DiscoveryMode) { TraceViews = options.TraceViews };
+            options.DiscoveryMode)
+        {
+            TraceViews = options.TraceViews,
+            WorldLoaded = purchases is null ? null : purchases.OnWorldLoaded,
+        };
         if (options.DiscoveryMode)
             log.Info("Kumo: discovery mode on; unmapped 2026 event codes are relayed and logged.");
 
