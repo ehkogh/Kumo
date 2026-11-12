@@ -101,8 +101,10 @@ public static class EventCodes
     public const byte AvatarFile = 73;
 
     /// <summary>
-    /// New in 2026: a shared object (seen: stickers; the same layout serves props, portals and
-    /// prints). <c>0</c> object type (8 = sticker), <c>1</c> action (0 Create, 1 Destroy, 2 Update),
+    /// New in 2026: a placed object. Object type <c>0</c> is a portal and <c>8</c> is a sticker;
+    /// each type has its own payload layout. <c>1</c> is the action (0 Create, 1 Destroy, 2 Update;
+    /// portals also send 129 CreateStaticPortal, which needs a server response as action 0).
+    /// For stickers, <c>0</c> is the object type,
     /// <c>2</c> object id, <c>4</c>/<c>5</c> packed position/rotation, <c>129</c> item id,
     /// <c>130</c> scale, <c>131</c> the spawn token from the API's <c>/inventory/spawn</c>.
     /// A Create needs keys the server adds (receivers refuse it otherwise): <c>9</c> bool,

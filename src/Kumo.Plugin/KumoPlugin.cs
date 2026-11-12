@@ -22,6 +22,7 @@ public sealed class KumoPlugin : PluginBase
     private PersistenceService? _persistence;
     private PurchaseService? _purchases;
     private OwnershipService? _ownership;
+    private SharingService? _sharing;
 
     public override string Name => "Kumo";
 
@@ -71,6 +72,8 @@ public sealed class KumoPlugin : PluginBase
         _persistence = persistence;
         var ownership = new OwnershipService(state, host, log);
         _ownership = ownership;
+        var sharing = new SharingService(host, log);
+        _sharing = sharing;
         var purchases = AuthorizationService.IsLocalRoom(state.GameId) ? null : new PurchaseService(state, api, host, log);
         _purchases = purchases;
 
@@ -92,7 +95,7 @@ public sealed class KumoPlugin : PluginBase
             interactions,
             instantiation,
             rateLimits,
-            new SharingService(host, log),
+            sharing,
             persistence,
             ownership,
             options.DiscoveryMode)
@@ -249,6 +252,7 @@ public sealed class KumoPlugin : PluginBase
 
     public override void OnCloseGame(ICloseGameCallInfo info)
     {
+        _sharing?.Stop();
         _rateLimits?.Stop();
         _purchases?.Stop();
         _persistence?.OnClose();
