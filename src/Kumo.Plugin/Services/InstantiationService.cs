@@ -40,13 +40,15 @@ public sealed class InstantiationService
         var allowed = new HashSet<int> { start + 1, start + 2, start + 3, start + 4 };
         if (mainViewId != start + 1 || viewIds.Any(id => !allowed.Contains(id)))
         {
-            Reject(info, "Invalid view layout.");
+            Reject(info, $"Invalid view layout (prefab '{prefab}', main view {mainViewId}, views [{string.Join(",", viewIds)}], "
+                       + $"keys [{string.Join(",", data.Keys.Cast<object>())}]).");
             return false;
         }
 
         if (!string.Equals(prefab, "VRCPlayer", StringComparison.Ordinal))
         {
-            Reject(info, "Only the player prefab is allowed.");
+            Reject(info, $"Only the player prefab is allowed (got '{prefab}', main view {mainViewId}, views [{string.Join(",", viewIds)}], "
+                       + $"keys [{string.Join(",", data.Keys.Cast<object>())}]).");
             return false;
         }
 
