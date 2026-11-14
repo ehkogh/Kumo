@@ -72,6 +72,18 @@ public sealed class LegacyBackendApiClient : IKumoApiClient
         Get<PurchaseChanges>("/api/1/photon/purchases/changed", ("secret", _options.ApiSecret), ("worldId", worldId),
             ("since", since?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? ""));
 
+    public (Dictionary<string, object>? Prop, Dictionary<string, object>? Item) GetPropSpawn(string userId, string propId,
+        string inventoryId)
+    {
+        var body = GetString("/api/1/photon/propSpawn", ("secret", _options.ApiSecret), ("userId", userId),
+            ("propId", propId), ("inventoryId", inventoryId));
+        // Dates stay the ISO text they came as: the client parses them itself, and Photon has no DateTime.
+        var root = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(body,
+            new JsonSerializerSettings { DateParseHandling = DateParseHandling.None });
+        return (Protocol.PhotonJson.ToPhoton(root?["prop"]) as Dictionary<string, object>,
+                Protocol.PhotonJson.ToPhoton(root?["item"]) as Dictionary<string, object>);
+    }
+
     private T? Get<T>(string path, params (string Key, string Value)[] query)
     {
         var body = GetString(path, query);

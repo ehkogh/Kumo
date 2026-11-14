@@ -72,7 +72,7 @@ public sealed class KumoPlugin : PluginBase
         _persistence = persistence;
         var ownership = new OwnershipService(state, host, log);
         _ownership = ownership;
-        var sharing = new SharingService(host, log);
+        var sharing = new SharingService(host, log, state, api);
         _sharing = sharing;
         var purchases = AuthorizationService.IsLocalRoom(state.GameId) ? null : new PurchaseService(state, api, host, log);
         _purchases = purchases;

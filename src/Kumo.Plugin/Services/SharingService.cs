@@ -42,25 +42,47 @@ public sealed class SharingService
     private const byte KeyPortalDuration = 131;
     private const byte KeyPortalSpawnId = 135;
     private const byte PropType = 11;
-    private const byte KeyPropServerField = 133;
+    /// <summary>Prop Create keys: 128 the prop id and 132 the inventory id (from the placer); 131 and 133 the records (from the server).</summary>
+    private const byte KeyPropId = 128;
+    private const byte KeyPropRecord = 131;
+    private const byte KeyPropInventoryId = 132;
+    private const byte KeyPropItemRecord = 133;
+    private const byte KeyPropAttributes = 136;
+    private const byte KeyPropDestroyFlag = 10;
     private const byte CreateStaticPortal = 129;
     private const byte Destroy = 1;
 
     private readonly IPluginHost _host;
     private readonly IPluginLogger _log;
+    private readonly RoomState _state;
+    private readonly Api.IKumoApiClient _api;
     private readonly Dictionary<string, object> _portalTimers = new(StringComparer.Ordinal);
     private readonly object _portalTimersLock = new();
     private bool _stopped;
 
-    public SharingService(IPluginHost host, IPluginLogger log)
+    public SharingService(IPluginHost host, IPluginLogger log, RoomState state, Api.IKumoApiClient api)
     {
         _host = host;
         _log = log;
+        _state = state;
+        _api = api;
     }
 
     public void Prepare(IRaiseEventCallInfo info)
     {
         if (info.Request.Data is not IDictionary data) return;
+        // Every shared-object event carries the sender's actor number in key 11, stamped by the
+        // server; the client's dispatcher (2026.4.1p1 0x12e8ac0) reads it before the action and
+        // silently drops the event without it. Kumo added it to Creates only, so a placed prop's
+        // follow-up (action 129: its view ids) never reached its handler, and the prop, which
+        // stays switched off until that arrives, never appeared (2026-11-14).
+        if (!data.Contains(KeyOwnerActor)) data[KeyOwnerActor] = info.ActorNr;
+        // A prop Destroy ({0: 11, 1: 1, 2: object id} from the client) also needs key 10, a Byte the
+        // handler (0x12e97d0) passes to the destroy callback as a flag; without it every receiver
+        // logged "ReceiveSharingEvent invoked with bad property list for event of type Destroy"
+        // and Remove did nothing. 0 is taken as the ordinary case (2026-11-14).
+        if (IsAction(data[KeyType], PropType) && IsAction(data[KeyAction], Destroy) && !data.Contains(KeyPropDestroyFlag))
+            data[KeyPropDestroyFlag] = (byte)0;
         if (IsAction(data[KeyType], 0) && IsAction(data[KeyAction], Destroy))
         {
             if (data[KeyPortalMarker] is string { Length: > 0 } destroyedId)
@@ -108,15 +130,7 @@ public sealed class SharingService
         {
             if (!data.Contains(KeyVerified)) data[KeyVerified] = true;
             if (IsAction(data[KeyType], PropType))
-            {
-                // The prop receiver requires two server-supplied fields in addition to the
-                // inventory id (132): "Required Properties: 1,0,2,11,4,5,9,128,130,129,131,132,133".
-                // Neither is in its key->type map and no prop handler reads them (2026.4 client:
-                // odd5ab's type map, .cctor 0x12E44B0, has 128-130, 132 and 134-136 only), so they only
-                // need to be present. Keep the prop's own id in 128 intact.
-                if (!data.Contains(KeyPropServerField)) data[KeyPropServerField] = "";
-                if (!data.Contains(KeyPortalDuration)) data[KeyPortalDuration] = (byte)0;
-            }
+                AddPropRecords(info, data);
             else if (!data.Contains(KeyStickerInt)) data[KeyStickerInt] = 0;
         }
 
@@ -126,8 +140,51 @@ public sealed class SharingService
         info.Request.ReceiverGroup = ReciverGroup.All;
         info.Request.Actors = null!;
 
-        _log.Info($"Kumo: shared object create from actor {info.ActorNr}, sent to all: " +
+        _log.Info($"Kumo: shared object create from actor {info.ActorNr} (object id {data[KeyObjectId]}, key 130 = {data[(byte)130]}), sent to all: " +
                   string.Join(", ", data.Keys.Cast<object>().Select(k => $"{k}={data[k]?.GetType().Name}")));
+    }
+
+    /// <summary>
+    /// A prop Create carries the records to build it from, which VRChat's server adds after reading
+    /// the spawn token: key 131 the prop (ApiProp, as /props/{id}) and key 133 the placer's
+    /// inventory item (ApiInventoryItem, for the id in 132). The receiver reads both as
+    /// <c>Dictionary&lt;string, object&gt;</c> and parses them with the models'
+    /// SetApiFieldsFromJson; it never fetches the prop itself. Without 131 every receiver, the
+    /// placer included, logged "[VRCItems] Did not receive a prop model for prop_…" and the prop
+    /// stayed a placement ghost; without 133, "Did not receive an inventory item for …".
+    /// (2026.4.1p1 receive handler 0x12e67c0: keys 0x83 and 0x85 read with the typed getter, then
+    /// SetApiFieldsFromJson; error literals of 33 and 38 characters. 2026-11-14.)
+    /// </summary>
+    private void AddPropRecords(IRaiseEventCallInfo info, IDictionary data)
+    {
+        // Key 136: the prop's custom attribute values (Int32[], written in order into the
+        // VRCPropDescriptor's attributes, e.g. a trim colour). The handler reads it with the plain
+        // indexer, so without it the whole Create threw KeyNotFoundException '136'; null or empty
+        // keeps the prefab's defaults (instance 0x131bd80 skips the loop). TODO: the item's
+        // userAttributes.
+        if (!data.Contains(KeyPropAttributes)) data[KeyPropAttributes] = Array.Empty<int>();
+
+        var propId = data[KeyPropId] as string;
+        var inventoryId = data[KeyPropInventoryId] as string ?? "";
+        if (propId is not { Length: > 0 } || !_state.Actors.TryGetValue(info.ActorNr, out var actor))
+        {
+            _log.Warn($"Kumo: prop create from actor {info.ActorNr} without a prop id or player; sent as is.");
+            return;
+        }
+
+        try
+        {
+            var (prop, item) = _api.GetPropSpawn(actor.UserId, propId, inventoryId);
+            if (prop is not null) data[KeyPropRecord] = prop;
+            if (item is not null) data[KeyPropItemRecord] = item;
+            if (prop is null || item is null)
+                _log.Warn($"Kumo: prop {propId} / item {inventoryId} for {actor.UserId}: " +
+                          $"prop record {(prop is null ? "missing" : "ok")}, item record {(item is null ? "missing" : "ok")}.");
+        }
+        catch (Exception ex)
+        {
+            _log.Warn($"Kumo: prop records for {propId} unavailable: {ex.Message}");
+        }
     }
 
     public void Stop()

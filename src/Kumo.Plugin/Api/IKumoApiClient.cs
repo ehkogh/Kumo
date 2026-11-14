@@ -22,6 +22,12 @@ public interface IKumoApiClient
     /// <c>Now</c> of the previous answer; null for the first call, which lists nobody).
     /// </summary>
     PurchaseChanges? GetPurchaseChanges(string worldId, long? since);
+
+    /// <summary>
+    /// The records a placed prop's event 74 Create carries (VRCat /photon/propSpawn): the prop and
+    /// the placer's inventory item, as Photon dictionaries. Either is null if VRCat has none.
+    /// </summary>
+    (Dictionary<string, object>? Prop, Dictionary<string, object>? Item) GetPropSpawn(string userId, string propId, string inventoryId);
 }
 
 public sealed class PurchaseChanges
