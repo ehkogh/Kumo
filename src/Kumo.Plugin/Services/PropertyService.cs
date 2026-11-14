@@ -30,7 +30,14 @@ public sealed class PropertyService
         _log = log;
     }
 
-    public bool TryPrepare(int actorNumber, Hashtable current, out Hashtable prepared, out string error)
+    /// <summary>
+    /// Prepares a player's properties. <paramref name="partial"/> is for updates (SetProperties,
+    /// event 42): Photon merges them into what the player already has, so only the keys the update
+    /// carries are touched. Without it every update reset the defaults below, and the first height
+    /// report after an avatar loaded set a VR player's <c>inVRMode</c> back to false for the rest
+    /// of the session (full-body players lying down got a spazzing head, 2026-11-14).
+    /// </summary>
+    public bool TryPrepare(int actorNumber, Hashtable current, out Hashtable prepared, out string error, bool partial = false)
     {
         prepared = new Hashtable();
         error = string.Empty;
@@ -44,7 +51,7 @@ public sealed class PropertyService
         var identity = actor.Identity;
         var isPrivileged = IsPrivileged(identity.User);
         var userProperties = ToUserProperties(identity.User);
-        var result = new Hashtable
+        var result = partial ? new Hashtable() : new Hashtable
         {
             ["inVRMode"] = false,
             ["showSocialRank"] = true,
@@ -65,7 +72,7 @@ public sealed class PropertyService
                 _log?.Info($"Kumo: actor property '{entry.Key}' ({entry.Value?.GetType().Name ?? "null"}) passed through.");
         }
 
-        if (isPrivileged)
+        if (isPrivileged && (!partial || current.ContainsKey("modTag")))
             result["modTag"] = string.Empty;
 
         // Claims the player is not entitled to are dropped, never refused. The properties handed on
@@ -98,6 +105,21 @@ public sealed class PropertyService
         CopyBooleanIfPresent(current, result, "showSocialRank");
         CopyBooleanIfPresent(current, result, "inVRMode");
 
+        if (partial)
+        {
+            // Server-owned keys go out again only when the update touched them, rebuilt from the
+            // API's record as on join. Re-sending avatarDict unasked makes every other client
+            // restart the avatar download (see ProfileRefreshService).
+            if (current.ContainsKey("user")) result["user"] = userProperties;
+            if (current.ContainsKey("avatarDict")) result["avatarDict"] = ToAvatarProperties(identity.AvatarDict);
+            if (current.ContainsKey("favatarDict")) result["favatarDict"] = ToAvatarProperties(identity.FavatarDict);
+            if (current.ContainsKey("avatarLookDict")) result["avatarLookDict"] = ToLookProperties(identity.AvatarLookDict);
+            if (current.ContainsKey("isInvisible") && !result.ContainsKey("isInvisible")) result["isInvisible"] = false;
+            _log?.Info($"Kumo: actor {actorNumber} property update: {string.Join(", ", current.Keys.Cast<object>().Select(k => k is "user" or "avatarDict" or "favatarDict" or "avatarLookDict" ? k : $"{k}={current[k]}"))}");
+            prepared = result;
+            return true;
+        }
+
         result["user"] = userProperties;
         result["avatarDict"] = ToAvatarProperties(identity.AvatarDict);
         result["favatarDict"] = ToAvatarProperties(identity.FavatarDict);
@@ -105,14 +127,16 @@ public sealed class PropertyService
         // updated_at). With no look it is null, which the client skips and Photon removes. Never an
         // empty dictionary: the client then throws "The given key 'id' was not present" and drops
         // the whole update, avatar switch included (2026-11-14).
-        result["avatarLookDict"] = identity.AvatarLookDict is { } look && look["id"] is { Type: Newtonsoft.Json.Linq.JTokenType.String } id
-                                   && ((string?)id)?.Length > 0
-            ? (Dictionary<string, object>)ToPhoton(look)!
-            : null;
+        result["avatarLookDict"] = ToLookProperties(identity.AvatarLookDict);
 
         prepared = result;
         return true;
     }
+
+    private static Dictionary<string, object>? ToLookProperties(Newtonsoft.Json.Linq.JObject? look) =>
+        look is not null && look["id"] is { Type: Newtonsoft.Json.Linq.JTokenType.String } id && ((string?)id)?.Length > 0
+            ? (Dictionary<string, object>)ToPhoton(look)!
+            : null;
 
     public void Broadcast(int actorNumber, Hashtable properties)
     {

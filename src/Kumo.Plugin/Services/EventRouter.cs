@@ -210,7 +210,7 @@ public sealed class EventRouter
             return;
         }
 
-        if (!_properties.TryPrepare(info.ActorNr, properties, out var prepared, out var error))
+        if (!_properties.TryPrepare(info.ActorNr, properties, out var prepared, out var error, partial: true))
         {
             info.Fail(error);
             return;

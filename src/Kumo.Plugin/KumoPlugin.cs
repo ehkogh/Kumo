@@ -287,7 +287,7 @@ public sealed class KumoPlugin : PluginBase
             return;
         }
 
-        if (!_properties.TryPrepare(info.ActorNr, info.Request.Properties, out var prepared, out var error))
+        if (!_properties.TryPrepare(info.ActorNr, info.Request.Properties, out var prepared, out var error, partial: true))
         {
             info.Fail(error);
             return;
