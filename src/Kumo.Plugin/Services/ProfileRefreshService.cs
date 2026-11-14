@@ -98,5 +98,6 @@ public sealed class ProfileRefreshService
     private static bool SameRecord(JoinValidationResponse before, JoinValidationResponse after) =>
         JsonConvert.SerializeObject(before.User) == JsonConvert.SerializeObject(after.User) &&
         JsonConvert.SerializeObject(before.AvatarDict) == JsonConvert.SerializeObject(after.AvatarDict) &&
-        JsonConvert.SerializeObject(before.FavatarDict) == JsonConvert.SerializeObject(after.FavatarDict);
+        JsonConvert.SerializeObject(before.FavatarDict) == JsonConvert.SerializeObject(after.FavatarDict) &&
+        JsonConvert.SerializeObject(before.AvatarLookDict) == JsonConvert.SerializeObject(after.AvatarLookDict);
 }

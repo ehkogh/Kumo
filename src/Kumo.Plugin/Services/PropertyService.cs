@@ -7,13 +7,27 @@ namespace Kumo.Plugin.Services;
 
 public sealed class PropertyService
 {
+    /// <summary>
+    /// Keys Kumo sets itself, from the API's record or the player's entitlements: whatever the
+    /// client puts in them is ignored (or honoured for staff only, below).
+    /// </summary>
+    private static readonly HashSet<string> Managed = new(StringComparer.Ordinal)
+    {
+        "user", "avatarDict", "favatarDict", "avatarLookDict", "modTag", "isInvisible", "canModerateInstance", "steamUserId",
+        "inVRMode", "showSocialRank", "avatarEyeHeight", "avatarHipHeight",
+    };
+
     private readonly RoomState _state;
     private readonly IPluginHost _host;
+    private readonly IPluginLogger? _log;
+    /// <summary>Client keys already logged as passed through, so each is named once per room.</summary>
+    private readonly HashSet<object> _passedThrough = new();
 
-    public PropertyService(RoomState state, IPluginHost host)
+    public PropertyService(RoomState state, IPluginHost host, IPluginLogger? log = null)
     {
         _state = state;
         _host = host;
+        _log = log;
     }
 
     public bool TryPrepare(int actorNumber, Hashtable current, out Hashtable prepared, out string error)
@@ -38,6 +52,18 @@ public sealed class PropertyService
             ["isInvisible"] = false,
             ["canModerateInstance"] = false,
         };
+
+        // Everything else the client sets passes through, as plain Photon does. The equipped look
+        // and its accessories travel in the player's own properties; rebuilt from a whitelist,
+        // they were dropped, and an equipped accessory never showed on anyone (2026-11-14). The
+        // keys Kumo vouches for are overwritten below, so this lets no claim through.
+        foreach (DictionaryEntry entry in current)
+        {
+            if (entry.Key is string name && Managed.Contains(name)) continue;
+            result[entry.Key] = entry.Value;
+            if (_passedThrough.Add(entry.Key))
+                _log?.Info($"Kumo: actor property '{entry.Key}' ({entry.Value?.GetType().Name ?? "null"}) passed through.");
+        }
 
         if (isPrivileged)
             result["modTag"] = string.Empty;
@@ -75,6 +101,14 @@ public sealed class PropertyService
         result["user"] = userProperties;
         result["avatarDict"] = ToAvatarProperties(identity.AvatarDict);
         result["favatarDict"] = ToAvatarProperties(identity.FavatarDict);
+        // The look worn on the avatar: the client puts its accessories on from this (by id and
+        // updated_at). With no look it is null, which the client skips and Photon removes. Never an
+        // empty dictionary: the client then throws "The given key 'id' was not present" and drops
+        // the whole update, avatar switch included (2026-11-14).
+        result["avatarLookDict"] = identity.AvatarLookDict is { } look && look["id"] is { Type: Newtonsoft.Json.Linq.JTokenType.String } id
+                                   && ((string?)id)?.Length > 0
+            ? (Dictionary<string, object>)ToPhoton(look)!
+            : null;
 
         prepared = result;
         return true;
@@ -147,6 +181,25 @@ public sealed class PropertyService
         ["ageVerified"] = user.AgeVerified,
         ["isAdult"] = user.IsAdult,
         ["ageVerificationStatus"] = user.AgeVerificationStatus,
+    };
+
+    /// <summary>
+    /// A JSON value as Photon carries it: objects as string-keyed dictionaries, arrays as lists
+    /// (as avatarDict sends them), and dates back as the ISO text they came as, since the client
+    /// parses updated_at itself.
+    /// </summary>
+    private static object? ToPhoton(Newtonsoft.Json.Linq.JToken token) => token switch
+    {
+        Newtonsoft.Json.Linq.JObject o => o.Properties().Where(p => p.Value.Type != Newtonsoft.Json.Linq.JTokenType.Null)
+            .ToDictionary(p => p.Name, p => ToPhoton(p.Value)!),
+        Newtonsoft.Json.Linq.JArray a => a.Select(ToPhoton).Where(v => v is not null).Cast<object>().ToList(),
+        Newtonsoft.Json.Linq.JValue { Type: Newtonsoft.Json.Linq.JTokenType.Date } d =>
+            ((DateTime)d.Value!).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fffK"),
+        Newtonsoft.Json.Linq.JValue { Type: Newtonsoft.Json.Linq.JTokenType.Integer } i =>
+            (long)i.Value! is var n && n >= int.MinValue && n <= int.MaxValue ? (int)n : n,
+        Newtonsoft.Json.Linq.JValue { Type: Newtonsoft.Json.Linq.JTokenType.Float } f => Convert.ToDouble(f.Value),
+        Newtonsoft.Json.Linq.JValue v => v.Value,
+        _ => null,
     };
 
     private static Dictionary<string, object> ToAvatarProperties(AvatarRecord avatar) => new()

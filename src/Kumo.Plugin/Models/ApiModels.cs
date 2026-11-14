@@ -10,6 +10,8 @@ public sealed class JoinValidationResponse
     public UserRecord User = new();
     public AvatarRecord AvatarDict = new();
     public AvatarRecord FavatarDict = new();
+    /// <summary>The look worn on the current avatar, as its inventory item (empty when none).</summary>
+    public Newtonsoft.Json.Linq.JObject? AvatarLookDict;
     public int WorldCapacity;
     public string WorldAuthor = string.Empty;
     public string InstanceCreator = string.Empty;

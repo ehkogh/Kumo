@@ -41,6 +41,8 @@ public sealed class SharingService
     private const byte KeyPortalByte130 = 130;
     private const byte KeyPortalDuration = 131;
     private const byte KeyPortalSpawnId = 135;
+    private const byte PropType = 11;
+    private const byte KeyPropServerField = 133;
     private const byte CreateStaticPortal = 129;
     private const byte Destroy = 1;
 
@@ -86,7 +88,7 @@ public sealed class SharingService
 
         if (data[KeyObjectId] is null or "") data[KeyObjectId] = Guid.NewGuid().ToString();
         if (!data.Contains(KeyOwnerActor)) data[KeyOwnerActor] = info.ActorNr;
-        if (data.Contains(KeyPortalShortName))
+        if (IsAction(data[KeyType], 0) && data.Contains(KeyPortalShortName))
         {
             // A dynamic Create supplies coordinates but omits key 128. The receiver requires
             // a nonempty string for its portal identity before it can create the object.
@@ -105,7 +107,17 @@ public sealed class SharingService
         else
         {
             if (!data.Contains(KeyVerified)) data[KeyVerified] = true;
-            if (!data.Contains(KeyStickerInt)) data[KeyStickerInt] = 0;
+            if (IsAction(data[KeyType], PropType))
+            {
+                // The prop receiver requires two server-supplied fields in addition to the
+                // inventory id (132): "Required Properties: 1,0,2,11,4,5,9,128,130,129,131,132,133".
+                // Neither is in its key->type map and no prop handler reads them (2026.4 client:
+                // odd5ab's type map, .cctor 0x12E44B0, has 128-130, 132 and 134-136 only), so they only
+                // need to be present. Keep the prop's own id in 128 intact.
+                if (!data.Contains(KeyPropServerField)) data[KeyPropServerField] = "";
+                if (!data.Contains(KeyPortalDuration)) data[KeyPortalDuration] = (byte)0;
+            }
+            else if (!data.Contains(KeyStickerInt)) data[KeyStickerInt] = 0;
         }
 
         // The placer gets the server's version back too, as the confirmation: a portal stays at

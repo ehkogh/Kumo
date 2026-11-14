@@ -61,7 +61,7 @@ public sealed class KumoPlugin : PluginBase
             log.Warn($"Kumo: runtime configuration unavailable; using defaults: {ex.Message}");
         }
 
-        var properties = new PropertyService(state, host);
+        var properties = new PropertyService(state, host, log);
         var moderation = new ModerationService(state, host, log);
         var rateLimits = new RateLimitService(state, host);
         var interactions = new InteractionPermissionService(state, host);
